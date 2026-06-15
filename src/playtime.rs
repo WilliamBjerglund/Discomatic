@@ -10,13 +10,15 @@ use std::fs;
 use std::sync::Mutex;
 use std::time::Instant;
 
-use poise::serenity_prelude as serenity;
+use poise::serenity_prelude::{self as serenity};
 use serde::{Deserialize, Serialize};
+use tokio::sync::Mutex as AsyncMutex;
 
 use crate::{Context, Error};
 
 const DATA_FILE: &str = "playtime_data.json";
 const TRACKED_GAME: &str = "League of Legends";
+const MESSAGE_DATA_FILE: &str = "message_data.json";
 
 // Accumulated playtime per user, stores as seconds
 #[derive(Default, Serialize, Deserialize)]
@@ -47,11 +49,40 @@ impl PlaytimeTotals {
     }
 }
 
+#[derive(Default, Serialize, Deserialize)]
+struct LeaderboardMessages {
+    message_per_channel: HashMap<u64, u64>, // channel_id -> message_id
+}
+
+impl LeaderboardMessages {
+    fn load() -> Self {
+        match fs::read_to_string(MESSAGE_DATA_FILE) {
+            Ok(content) => serde_json::from_str(&content).unwrap_or_default(),
+            Err(_) => Self::default(),
+        }
+    }
+
+    fn save(&self) {
+        match serde_json::to_string_pretty(self) {
+            Ok(json) => {
+                if let Err(error) = fs::write(MESSAGE_DATA_FILE, json) {
+                    eprintln!("Failed to save message data: {}", error);
+                }
+            }
+            Err(error) => {
+                eprintln!("Failed to serialize message data: {}", error)
+            }
+        }
+    }
+}
+
 pub struct PlaytimeTracker {
     // when each users session is started
     active_sessions: Mutex<HashMap<u64, Instant>>, // user_id -> session_start_time
     // completed playtime for users on storage.
-    totals: Mutex<PlaytimeTotals>, // Accumulated playtime totals
+    totals: Mutex<PlaytimeTotals>, // Accumulated playtime
+    // channel_id -> last leaderboard message_id
+    last_messages: AsyncMutex<LeaderboardMessages>,
 }
 
 // This struct will be shared across the bot, so it needs to be thread-safe (hence the Mutex).
@@ -60,6 +91,7 @@ impl PlaytimeTracker {
         Self {
             active_sessions: Mutex::new(HashMap::new()),
             totals: Mutex::new(PlaytimeTotals::load()),
+            last_messages: AsyncMutex::new(LeaderboardMessages::load()),
         }
     }
 
@@ -129,11 +161,41 @@ pub async fn playtime(ctx: Context<'_>) -> Result<(), Error> {
         ));
     }
 
-    ctx.say(format!(
+    let content = format!(
         "**Top 10 most degenerate LoL players so far:**\n{}",
         lines.join("\n")
-    ))
-    .await?;
+    );
+
+    let channel_id = ctx.channel_id();
+    let channel_id_u64 = channel_id.get();
+
+    let mut message_data = ctx.data().playtime_tracker.last_messages.lock().await;
+
+    // look up the previous message without removing.
+    let old_message_id = message_data
+        .message_per_channel
+        .get(&channel_id_u64)
+        .copied();
+
+    // post new leaderboard
+    let reply = ctx.say(content).await?;
+    let new_message = reply.message().await?;
+
+    // since the new message exist delete the old one.
+    if let Some(old_message_id) = old_message_id {
+        let old_message_id = serenity::MessageId::new(old_message_id);
+        if let Err(error) = channel_id.delete_message(ctx.http(), old_message_id).await {
+            eprintln!("Failed to delete old leaderboard message: {}", error);
+        }
+    }
+
+    // store the new ID
+    message_data
+        .message_per_channel
+        .insert(channel_id_u64, new_message.id.get());
+
+    // finally we persist the updated IDS to our JSON
+    message_data.save();
 
     Ok(())
 }
