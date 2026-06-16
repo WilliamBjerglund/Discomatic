@@ -6,11 +6,13 @@ For now it's a dice roller that understands notation like d20, 2d6, or 2d20+4, d
 mod dice; // Roll Dice
 mod playtime; // Track playtime in LoL
 
+use std::sync::Arc;
+
 use colored::*;
 use poise::serenity_prelude as serenity;
 
 struct Data {
-    playtime_tracker: playtime::PlaytimeTracker,
+    playtime_tracker: Arc<playtime::PlaytimeTracker>,
 }
 
 // A catch-all error type.
@@ -28,7 +30,7 @@ async fn main() -> Result<(), Error> {
 
     let framework = poise::Framework::builder()
         .options(poise::FrameworkOptions {
-            commands: vec![dice::roll(), playtime::playtime()],
+            commands: vec![dice::roll(), playtime::playtime(), playtime::playtimeauto()],
             event_handler: |ctx, event, framework, data| {
                 Box::pin(handle_event(ctx, event, framework, data))
             },
@@ -39,9 +41,16 @@ async fn main() -> Result<(), Error> {
                 println!("Logged in as {}", ready.user.name);
                 // Registers /roll and /playtime with Discord.
                 poise::builtins::register_globally(ctx, &framework.options().commands).await?;
-                Ok(Data {
-                    playtime_tracker: playtime::PlaytimeTracker::new(),
-                })
+
+                let playtime_tracker = Arc::new(playtime::PlaytimeTracker::new());
+
+                // starts the background task
+                tokio::spawn(playtime::run_auto_leaderboard_loop(
+                    ctx.http.clone(),
+                    playtime_tracker.clone(),
+                ));
+
+                Ok(Data { playtime_tracker })
             })
         })
         .build();

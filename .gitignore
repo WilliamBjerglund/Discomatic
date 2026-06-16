@@ -1,3 +1,3 @@
 /target
 .env
-playtime_data.json
+*.json
