@@ -6,82 +6,20 @@ as a reference
 */
 
 use std::collections::HashMap;
-use std::fs;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use poise::serenity_prelude::{self as serenity};
-use serde::{Deserialize, Serialize};
-use tokio::sync::Mutex as AsyncMutex;
+use sqlx::SqlitePool;
 
 use crate::{Context, Error};
 
-const DATA_FILE: &str = "playtime_data.json";
-const MESSAGE_DATA_FILE: &str = "message_data.json";
-const AUTO_DATA_FILE: &str = "auto_data.json";
 const TRACKED_GAME: &str = "League of Legends";
 
 const AUTO_CHECK_INTERVAL: Duration = Duration::from_secs(5 * 60);
 
-// Accumulated playtime per user, stores as seconds
-#[derive(Default, Serialize, Deserialize)]
-struct PlaytimeTotals {
-    seconds_per_user: HashMap<u64, u64>, // user_id -> total_seconds (u64 for simplicity)
-}
-
-impl PlaytimeTotals {
-    // Load playtime data from file, or return an empty tracker if the file doesn't exist or is invalid.
-    fn load() -> Self {
-        match fs::read_to_string(DATA_FILE) {
-            Ok(content) => serde_json::from_str(&content).unwrap_or_default(),
-            Err(_) => Self::default(),
-        }
-    }
-
-    // Save playtime data to file.
-    fn save(&self) {
-        if let Ok(json) = serde_json::to_string_pretty(self) {
-            let _ = fs::write(DATA_FILE, json);
-        }
-    }
-
-    // Add playtime for a user.
-    fn add_seconds(&mut self, user_id: u64, seconds: u64) {
-        *self.seconds_per_user.entry(user_id).or_insert(0) += seconds;
-        self.save()
-    }
-}
-
-#[derive(Default, Serialize, Deserialize)]
-struct LeaderboardMessages {
-    message_per_channel: HashMap<u64, u64>, // channel_id -> message_id
-}
-
-impl LeaderboardMessages {
-    fn load() -> Self {
-        match fs::read_to_string(MESSAGE_DATA_FILE) {
-            Ok(content) => serde_json::from_str(&content).unwrap_or_default(),
-            Err(_) => Self::default(),
-        }
-    }
-
-    fn save(&self) {
-        match serde_json::to_string_pretty(self) {
-            Ok(json) => {
-                if let Err(error) = fs::write(MESSAGE_DATA_FILE, json) {
-                    eprintln!("Failed to save message data: {}", error);
-                }
-            }
-            Err(error) => {
-                eprintln!("Failed to serialize message data: {}", error)
-            }
-        }
-    }
-}
-
-// The servers Leaderboard setup, where does it live and how often does it refresh and is it on
-#[derive(Clone, Serialize, Deserialize)]
+// Configuration for the server's leaderboard: channel location, message ID, refresh interval, and enabled status.
 struct AutoLeaderboardConfig {
     channel_id: u64,
     message_id: u64,
@@ -90,44 +28,9 @@ struct AutoLeaderboardConfig {
     next_due: u64,
 }
 
-// Onee leaderboard config per server keyed by its guild id
-#[derive(Default, Serialize, Deserialize)]
-struct AutoLeaderboards {
-    config_per_guild: HashMap<u64, AutoLeaderboardConfig>,
-}
-
-// Configuration for automatic leaderboard updates
-impl AutoLeaderboards {
-    fn load() -> Self {
-        match fs::read_to_string(AUTO_DATA_FILE) {
-            Ok(content) => serde_json::from_str(&content).unwrap_or_default(),
-            Err(_) => Self::default(),
-        }
-    }
-
-    fn save(&self) {
-        match serde_json::to_string_pretty(self) {
-            Ok(json) => {
-                if let Err(error) = fs::write(AUTO_DATA_FILE, json) {
-                    eprintln!("Failed to save auto-leaderboard data: {}", error);
-                }
-            }
-            Err(error) => {
-                eprintln!("Failed to serialize auto-leaderboard data: {}", error)
-            }
-        }
-    }
-}
-
 pub struct PlaytimeTracker {
     // when each users session is started
     active_sessions: Mutex<HashMap<u64, Instant>>, // user_id -> session_start_time
-    // completed playtime for users on storage.
-    totals: Mutex<PlaytimeTotals>, // Accumulated playtime
-    // channel_id -> last leaderboard message_id
-    last_messages: AsyncMutex<LeaderboardMessages>,
-    // guild_id -> auto leaderboard config
-    auto_leaderboards: AsyncMutex<AutoLeaderboards>,
 }
 
 // This struct will be shared across the bot, so it needs to be thread-safe (hence the Mutex).
@@ -135,15 +38,15 @@ impl PlaytimeTracker {
     pub fn new() -> Self {
         Self {
             active_sessions: Mutex::new(HashMap::new()),
-            totals: Mutex::new(PlaytimeTotals::load()),
-            last_messages: AsyncMutex::new(LeaderboardMessages::load()),
-            auto_leaderboards: AsyncMutex::new(AutoLeaderboards::load()),
         }
     }
 
-    // Now we need a call for every "precense" update discord has, essetially we check when sessions start and end.
-    // based on whether the individuals activity list contains the game we want to track.
-    pub fn handle_presence_update(&self, user_id: u64, activities: &[serenity::Activity]) {
+    // Handles presence updates to track session start/end, returns elapsed seconds when session ends.
+    pub fn handle_presence_update(
+        &self,
+        user_id: u64,
+        activities: &[serenity::Activity],
+    ) -> Option<u64> {
         let is_playing_league = activities.iter().any(|activity| {
             activity.kind == serenity::ActivityType::Playing && activity.name == TRACKED_GAME
         });
@@ -153,26 +56,50 @@ impl PlaytimeTracker {
 
         if is_playing_league {
             sessions.entry(user_id).or_insert_with(Instant::now);
+            None
         } else if let Some(start_time) = sessions.remove(&user_id) {
             let elapsed = start_time.elapsed().as_secs();
-            drop(sessions); // Release the lock before updating totals.
-            self.totals.lock().unwrap().add_seconds(user_id, elapsed);
+            Some(elapsed)
+        } else {
+            None
         }
     }
+}
 
-    // returns up to 10 users with the most playtime, sorted by playtime 1-10
-    pub fn get_players(&self, limit: usize) -> Vec<(u64, u64)> {
-        let totals = self.totals.lock().unwrap();
+// Persists the playtime data from LoL if it's a first time player it just adds a new row for them.
+pub async fn record_completed_session(
+    pool: &SqlitePool,
+    user_id: u64,
+    seconds: u64,
+) -> Result<(), Error> {
+    let user_id = user_id as i64;
+    let seconds = seconds as i64;
 
-        let mut entries: Vec<(u64, u64)> = totals
-            .seconds_per_user
-            .iter()
-            .map(|(&user_id, &seconds)| (user_id, seconds))
-            .collect();
-        entries.sort_by(|left, right| right.1.cmp(&left.1)); // Sort by playtime in descending order
-        entries.truncate(limit);
-        entries
-    }
+    sqlx::query(
+        "INSERT INTO playtime_totals (user_id, total_seconds) VALUES (?1, ?2)
+         ON CONFLICT(user_id) DO UPDATE SET total_seconds = total_seconds + ?2",
+    )
+    .bind(user_id)
+    .bind(seconds)
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+// Returns 10 (limit) users with the most played sorted with ORDER
+async fn get_players(pool: &SqlitePool, limit: i64) -> Result<Vec<(u64, u64)>, Error> {
+    let rows: Vec<(i64, i64)> = sqlx::query_as(
+        "SELECT user_id, total_seconds FROM playtime_totals ORDER BY total_seconds DESC LIMIT ?1",
+    )
+    .bind(limit)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|(user_id, seconds)| (user_id as u64, seconds as u64))
+        .collect())
 }
 
 // Formats a number of seconds as something more readable like "3h 27m"
@@ -225,7 +152,8 @@ async fn build_leaderboard_content(
 // Show the Top 10 users
 #[poise::command(slash_command)]
 pub async fn playtime(ctx: Context<'_>) -> Result<(), Error> {
-    let top_players = ctx.data().playtime_tracker.get_players(10);
+    let pool = &ctx.data().pool;
+    let top_players = get_players(pool, 10).await?;
 
     if top_players.is_empty() {
         ctx.say("No playtime data available yet.").await?;
@@ -237,13 +165,12 @@ pub async fn playtime(ctx: Context<'_>) -> Result<(), Error> {
     let channel_id = ctx.channel_id();
     let channel_id_u64 = channel_id.get();
 
-    let mut message_data = ctx.data().playtime_tracker.last_messages.lock().await;
-
-    // Look up the last message ID without removing it yet, thus message data persist if new message fails.
-    let old_message_id = message_data
-        .message_per_channel
-        .get(&channel_id_u64)
-        .copied();
+    // read the old message from database so we can delete it after posting the new one.
+    let old_message_id: Option<i64> =
+        sqlx::query_scalar("SELECT message_id FROM leaderboard_messages WHERE channel_id = ?1")
+            .bind(channel_id_u64 as i64)
+            .fetch_optional(pool)
+            .await?;
 
     // post new leaderboard
     let reply = ctx.say(content).await?;
@@ -251,19 +178,21 @@ pub async fn playtime(ctx: Context<'_>) -> Result<(), Error> {
 
     // now delete the old one
     if let Some(old_message_id) = old_message_id {
-        let old_message_id = serenity::MessageId::new(old_message_id);
+        let old_message_id = serenity::MessageId::new(old_message_id as u64);
         if let Err(error) = channel_id.delete_message(ctx.http(), old_message_id).await {
             eprintln!("Failed to delete old leaderboard message: {}", error);
         }
     }
 
-    // store the new ID
-    message_data
-        .message_per_channel
-        .insert(channel_id_u64, new_message.id.get());
-
-    // finally we persist the updated IDS to our JSON
-    message_data.save();
+    // Upsert the new leaderboard message ID for this channel.
+    sqlx::query(
+        "INSERT INTO leaderboard_messages (channel_id, message_id) VALUES (?1, ?2)
+         ON CONFLICT(channel_id) DO UPDATE SET message_id = ?2",
+    )
+    .bind(channel_id_u64 as i64)
+    .bind(new_message.id.get() as i64)
+    .execute(pool)
+    .await?;
 
     Ok(())
 }
@@ -289,19 +218,84 @@ impl Interval {
     }
 }
 
+// Retrives the auto-leaderboard configuration for a guild, if it exists, from the database.
+async fn get_auto_leaderboard(
+    pool: &SqlitePool,
+    guild_id: u64,
+) -> Result<Option<AutoLeaderboardConfig>, Error> {
+    let row: Option<(i64, i64, i64, i64, i64)> = sqlx::query_as(
+        "SELECT channel_id, message_id, interval_seconds, enabled, next_due
+         FROM auto_leaderboards WHERE guild_id = ?1",
+    )
+    .bind(guild_id as i64)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(row.map(
+        |(channel_id, message_id, interval_seconds, enabled, next_due)| AutoLeaderboardConfig {
+            channel_id: channel_id as u64,
+            message_id: message_id as u64,
+            interval_seconds: interval_seconds as u64,
+            enabled: enabled != 0,
+            next_due: next_due as u64,
+        },
+    ))
+}
+
+// Saves the auto-leaderboard configuration for a guild to the database, inserting a new row or updating the existing one.
+async fn upsert_auto_leaderboard(
+    pool: &SqlitePool,
+    guild_id: u64,
+    config: &AutoLeaderboardConfig,
+) -> Result<(), Error> {
+    sqlx::query(
+        "INSERT INTO auto_leaderboards (guild_id, channel_id, message_id, interval_seconds, enabled, next_due)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+         ON CONFLICT(guild_id) DO UPDATE SET
+            channel_id = ?2,
+            message_id = ?3,
+            interval_seconds = ?4,
+            enabled = ?5,
+            next_due = ?6",
+    )
+    .bind(guild_id as i64)
+    .bind(config.channel_id as i64)
+    .bind(config.message_id as i64)
+    .bind(config.interval_seconds as i64)
+    .bind(config.enabled as i64)
+    .bind(config.next_due as i64)
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+// Updates the message_id for a guild's auto-leaderboard configuration in the database.
+async fn update_auto_leaderboard_message_id(
+    pool: &SqlitePool,
+    guild_id: u64,
+    message_id: u64,
+) -> Result<(), Error> {
+    sqlx::query("UPDATE auto_leaderboards SET message_id = ?1 WHERE guild_id = ?2")
+        .bind(message_id as i64)
+        .bind(guild_id as i64)
+        .execute(pool)
+        .await?;
+
+    Ok(())
+}
+
 // This auto leaderboard message will be posted in a channel and then updated every X time, where X is the interval the user selects when setting it up.
 // it also remembers channel IDs for next time
 async fn refresh_auto_leaderboard(
     http: &serenity::Http,
-    tracker: &PlaytimeTracker,
+    pool: &SqlitePool,
     guild_id: u64,
 ) -> Result<(), Error> {
-    let top_players = tracker.get_players(10);
+    let top_players = get_players(pool, 10).await?;
     let content = build_leaderboard_content(http, &top_players).await?;
 
-    let mut auto_data = tracker.auto_leaderboards.lock().await;
-
-    let Some(config) = auto_data.config_per_guild.get_mut(&guild_id) else {
+    let Some(config) = get_auto_leaderboard(pool, guild_id).await? else {
         return Ok(());
     };
 
@@ -320,11 +314,9 @@ async fn refresh_auto_leaderboard(
                 .send_message(http, serenity::CreateMessage::new().content(content))
                 .await?;
 
-            config.message_id = new_message.id.get();
+            update_auto_leaderboard_message_id(pool, guild_id, new_message.id.get()).await?;
         }
     }
-
-    auto_data.save();
 
     Ok(())
 }
@@ -339,6 +331,8 @@ pub async fn playtimeauto(
     #[description = "How often the leaderboard should refresh"] interval: Interval,
     #[description = "Whether automatic refreshing is turned on"] enabled: bool,
 ) -> Result<(), Error> {
+    let pool = &ctx.data().pool;
+
     let guild_id = ctx
         .guild_id()
         .expect("This command should only be used in a guild")
@@ -346,13 +340,11 @@ pub async fn playtimeauto(
     let channel_id = ctx.channel_id();
     let channel_id_u64 = channel_id.get();
 
-    let top_players = ctx.data().playtime_tracker.get_players(10);
+    let top_players = get_players(pool, 10).await?;
     let content = build_leaderboard_content(ctx.http(), &top_players).await?;
 
-    let mut auto_data = ctx.data().playtime_tracker.auto_leaderboards.lock().await;
-
-    // Clone any existing config and mutate the map below without fighting a held ref.
-    let existing_config = auto_data.config_per_guild.get(&guild_id).cloned();
+    // We read the existing config first rather than holding a lock across all calls below.
+    let existing_config = get_auto_leaderboard(pool, guild_id).await?;
 
     let moving_channels = existing_config
         .as_ref()
@@ -367,7 +359,7 @@ pub async fn playtimeauto(
 
     if moving_channels {
         // remove old message
-        if let Some(old_config) = existing_config {
+        if let Some(old_config) = &existing_config {
             let old_channel_id = serenity::ChannelId::new(old_config.channel_id);
             let old_message_id = serenity::MessageId::new(old_config.message_id);
 
@@ -383,19 +375,21 @@ pub async fn playtimeauto(
         let reply = ctx.say(content).await?;
         let new_message = reply.message().await?;
 
-        auto_data.config_per_guild.insert(
+        upsert_auto_leaderboard(
+            pool,
             guild_id,
-            AutoLeaderboardConfig {
+            &AutoLeaderboardConfig {
                 channel_id: channel_id_u64,
                 message_id: new_message.id.get(),
                 interval_seconds: interval.as_seconds(),
                 enabled,
                 next_due,
             },
-        );
+        )
+        .await?;
     } else {
         // same channel, update settings and refresh message
-        let config = auto_data.config_per_guild.get_mut(&guild_id).unwrap();
+        let mut config = existing_config.expect("moving_channels is false, so a config exists");
         config.interval_seconds = interval.as_seconds();
         config.enabled = enabled;
         config.next_due = next_due;
@@ -407,6 +401,8 @@ pub async fn playtimeauto(
             eprintln!("Failed to edit auto leaderboard message: {}", error);
         }
 
+        upsert_auto_leaderboard(pool, guild_id, &config).await?;
+
         // Acknowledge the command
         ctx.send(
             poise::CreateReply::default()
@@ -416,32 +412,37 @@ pub async fn playtimeauto(
         .await?;
     }
 
-    auto_data.save();
-
     Ok(())
 }
 
 // Loop leaderbaord in the background periodically.
 // update if refresh time
-pub async fn run_auto_leaderboard_loop(http: Arc<serenity::Http>, tracker: Arc<PlaytimeTracker>) {
+pub async fn run_auto_leaderboard_loop(http: Arc<serenity::Http>, pool: SqlitePool) {
     loop {
         tokio::time::sleep(AUTO_CHECK_INTERVAL).await;
 
-        // figure out which guilds need refreshing
-        let due_guilds: Vec<u64> = {
-            let auto_data = tracker.auto_leaderboards.lock().await;
-            let now = current_unix_time();
+        // This queries the table directly for the enabled rows that are due.
+        let now = current_unix_time();
 
-            auto_data
-                .config_per_guild
-                .iter()
-                .filter(|(_, config)| config.enabled && now >= config.next_due)
-                .map(|(&guild_id, _)| guild_id)
-                .collect()
+        let due_guilds: Vec<(u64, u64)> = match sqlx::query_as::<_, (i64, i64)>(
+            "SELECT guild_id, interval_seconds FROM auto_leaderboards WHERE enabled = 1 AND next_due <= ?1",
+        )
+        .bind(now as i64)
+        .fetch_all(&pool)
+        .await
+        {
+            Ok(rows) => rows
+                .into_iter()
+                .map(|(guild_id, interval_seconds)| (guild_id as u64, interval_seconds as u64))
+                .collect(),
+            Err(error) => {
+                eprintln!("Failed to check due auto leaderboards: {}", error);
+                Vec::new()
+            }
         };
 
-        for guild_id in due_guilds {
-            if let Err(error) = refresh_auto_leaderboard(&http, &tracker, guild_id).await {
+        for (guild_id, interval_seconds) in due_guilds {
+            if let Err(error) = refresh_auto_leaderboard(&http, &pool, guild_id).await {
                 eprintln!(
                     "Failed to refresh auto leaderboard for guild {}: {}",
                     guild_id, error
@@ -449,11 +450,18 @@ pub async fn run_auto_leaderboard_loop(http: Arc<serenity::Http>, tracker: Arc<P
             }
 
             // schedule the next refresh no matter what
-            let mut auto_data = tracker.auto_leaderboards.lock().await;
-            if let Some(config) = auto_data.config_per_guild.get_mut(&guild_id) {
-                config.next_due = current_unix_time() + config.interval_seconds;
+            if let Err(error) =
+                sqlx::query("UPDATE auto_leaderboards SET next_due = ?1 WHERE guild_id = ?2")
+                    .bind((current_unix_time() + interval_seconds) as i64)
+                    .bind(guild_id as i64)
+                    .execute(&pool)
+                    .await
+            {
+                eprintln!(
+                    "Failed to schedule next refresh for guild {}: {}",
+                    guild_id, error
+                );
             }
-            auto_data.save();
         }
     }
 }

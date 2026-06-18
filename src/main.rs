@@ -3,6 +3,7 @@ This is my simple rust discord bot for now, i might split into more files as i p
 For now it's a dice roller that understands notation like d20, 2d6, or 2d20+4, defaulting to a single d6.
 */
 
+mod db; // Shared SQL database for all modules to use
 mod dice; // Roll Dice
 mod playtime; // Track playtime in LoL
 
@@ -10,9 +11,11 @@ use std::sync::Arc;
 
 use colored::*;
 use poise::serenity_prelude as serenity;
+use sqlx::SqlitePool;
 
 struct Data {
     playtime_tracker: Arc<playtime::PlaytimeTracker>,
+    pool: SqlitePool,
 }
 
 // A catch-all error type.
@@ -39,18 +42,22 @@ async fn main() -> Result<(), Error> {
         .setup(|ctx, ready, framework| {
             Box::pin(async move {
                 println!("Logged in as {}", ready.user.name);
-                // Registers /roll and /playtime with Discord.
+                // Registers /roll and /playtime with Discord. commands with discord
                 poise::builtins::register_globally(ctx, &framework.options().commands).await?;
 
+                let pool = db::init_pool().await?;
                 let playtime_tracker = Arc::new(playtime::PlaytimeTracker::new());
 
                 // starts the background task
                 tokio::spawn(playtime::run_auto_leaderboard_loop(
                     ctx.http.clone(),
-                    playtime_tracker.clone(),
+                    pool.clone(),
                 ));
 
-                Ok(Data { playtime_tracker })
+                Ok(Data {
+                    playtime_tracker,
+                    pool,
+                })
             })
         })
         .build();
@@ -79,20 +86,18 @@ async fn handle_event(
     data: &Data,
 ) -> Result<(), Error> {
     if let serenity::FullEvent::PresenceUpdate { new_data } = event {
-        let activity_names: Vec<String> = new_data
-            .activities
-            .iter()
-            .map(|activity| format!("{:?}: {}", activity.kind, activity.name))
-            .collect();
-
-        println!(
-            "Presence update for user {}: [{}]",
-            new_data.user.id.get(),
-            activity_names.join(", ")
-        );
-
-        data.playtime_tracker
+        let elapsed_seconds = data
+            .playtime_tracker
             .handle_presence_update(new_data.user.id.get(), &new_data.activities);
+
+        if let Some(seconds) = elapsed_seconds {
+            if let Err(error) =
+                playtime::record_completed_session(&data.pool, new_data.user.id.get(), seconds)
+                    .await
+            {
+                eprintln!("Failed to record playtime: {}", error);
+            }
+        }
     }
 
     Ok(())
