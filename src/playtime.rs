@@ -17,7 +17,7 @@ use crate::{Context, Error};
 const TRACKED_GAME: &str = "League of Legends";
 
 // How often the background task checks whether any auto-leaderboard is due for a refresh.
-const AUTO_CHECK_INTERVAL: Duration = Duration::from_secs(1 * 60);
+const AUTO_CHECK_INTERVAL: Duration = Duration::from_secs(5 * 60);
 
 pub struct PlaytimeTracker {
     // when each users session is started
