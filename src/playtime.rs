@@ -17,7 +17,7 @@ use crate::{Context, Error};
 const TRACKED_GAME: &str = "League of Legends";
 
 // How often the background task checks whether any auto-leaderboard is due for a refresh.
-const AUTO_CHECK_INTERVAL: Duration = Duration::from_secs(5 * 60);
+const AUTO_CHECK_INTERVAL: Duration = Duration::from_secs(1 * 60);
 
 pub struct PlaytimeTracker {
     // when each users session is started
@@ -143,7 +143,12 @@ async fn refresh_leaderboard(
 
     // Post the new message at the bottom of the channel.
     let new_message = serenity_channel
-        .send_message(http, serenity::CreateMessage::new().content(content))
+        .send_message(
+            http,
+            serenity::CreateMessage::new()
+                .content(content)
+                .flags(serenity::MessageFlags::SUPPRESS_NOTIFICATIONS),
+        )
         .await?;
 
     // Store the new message_id, preserving whatever auto settings already exist for this channel.
