@@ -11,6 +11,7 @@ use std::sync::Arc;
 
 use colored::*;
 use poise::serenity_prelude as serenity;
+use sqlx;
 use sqlx::SqlitePool;
 
 struct Data {
@@ -86,14 +87,19 @@ async fn handle_event(
     data: &Data,
 ) -> Result<(), Error> {
     if let serenity::FullEvent::PresenceUpdate { new_data } = event {
-        let elapsed_seconds = data
+        let elapsed = data
             .playtime_tracker
             .handle_presence_update(new_data.user.id.get(), &new_data.activities);
 
-        if let Some(seconds) = elapsed_seconds {
-            if let Err(error) =
-                playtime::record_completed_session(&data.pool, new_data.user.id.get(), seconds)
-                    .await
+        if let Some(seconds) = elapsed {
+            if let Err(error) = sqlx::query(
+                "INSERT INTO playtime_totals (user_id, total_seconds) VALUES (?1, ?2)
+                 ON CONFLICT(user_id) DO UPDATE SET total_seconds = total_seconds + ?2",
+            )
+            .bind(new_data.user.id.get() as i64)
+            .bind(seconds as i64)
+            .execute(&data.pool)
+            .await
             {
                 eprintln!("Failed to record playtime: {}", error);
             }
