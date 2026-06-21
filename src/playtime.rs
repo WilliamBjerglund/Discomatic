@@ -311,7 +311,7 @@ pub async fn run_auto_leaderboard_loop(http: Arc<serenity::Http>, pool: SqlitePo
                 refresh_leaderboard(&pool, &http, channel_id as u64, guild_id as u64).await
             {
                 eprintln!(
-                    "Failed to refresh auto leaderboard for channel {}: {}",
+                    "Failed to refresh auto leaderboard for channel {}: {:#?}",
                     channel_id, error
                 );
             }
