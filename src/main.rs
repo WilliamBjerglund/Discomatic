@@ -4,8 +4,12 @@ For now it's a dice roller that understands notation like d20, 2d6, or 2d20+4, d
 */
 
 mod db; // Shared SQL database for all modules to use
-mod dice; // Roll Dice
-mod playtime; // Track playtime in LoL
+mod random {
+    pub mod dice; // Roll Dice
+}
+mod league {
+    pub mod playtime; // Track playtime in LoL using Discord Presence updates.
+}
 
 use std::sync::Arc;
 
@@ -15,7 +19,7 @@ use sqlx;
 use sqlx::SqlitePool;
 
 struct Data {
-    playtime_tracker: Arc<playtime::PlaytimeTracker>,
+    playtime_tracker: Arc<league::playtime::PlaytimeTracker>,
     pool: SqlitePool,
 }
 
@@ -34,7 +38,11 @@ async fn main() -> Result<(), Error> {
 
     let framework = poise::Framework::builder()
         .options(poise::FrameworkOptions {
-            commands: vec![dice::roll(), playtime::playtime(), playtime::playtimeauto()],
+            commands: vec![
+                random::dice::roll(),
+                league::playtime::playtime(),
+                league::playtime::playtimeauto(),
+            ],
             event_handler: |ctx, event, framework, data| {
                 Box::pin(handle_event(ctx, event, framework, data))
             },
@@ -47,10 +55,10 @@ async fn main() -> Result<(), Error> {
                 poise::builtins::register_globally(ctx, &framework.options().commands).await?;
 
                 let pool = db::init_pool().await?;
-                let playtime_tracker = Arc::new(playtime::PlaytimeTracker::new());
+                let playtime_tracker = Arc::new(league::playtime::PlaytimeTracker::new());
 
                 // starts the background task
-                tokio::spawn(playtime::run_auto_leaderboard_loop(
+                tokio::spawn(league::playtime::run_auto_leaderboard_loop(
                     ctx.http.clone(),
                     pool.clone(),
                 ));
