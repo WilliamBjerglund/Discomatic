@@ -180,7 +180,14 @@ pub async fn playtime(ctx: Context<'_>) -> Result<(), Error> {
             .expect("guild_only ensures this is set")
             .get(),
     )
-    .await
+    .await?;
+
+    // Now we remove the thinking response i forgor that earlier and its bugging me.
+    if let poise::Context::Application(app_ctx) = ctx {
+        app_ctx.interaction.delete_response(ctx.http()).await?;
+    }
+
+    Ok(())
 }
 
 // A select list for intervals for playtimeauto
