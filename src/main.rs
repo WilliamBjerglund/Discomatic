@@ -10,6 +10,9 @@ mod random {
 mod league {
     pub mod playtime; // Track playtime in LoL using Discord Presence updates.
 }
+mod bib_sanitizer {
+    pub mod sanitizer; // Sanitize links
+}
 
 use std::sync::Arc;
 
@@ -33,8 +36,9 @@ async fn main() -> Result<(), Error> {
     dotenvy::dotenv().ok();
     let token = std::env::var("DISCORD_TOKEN").expect("Set the DISCORD_TOKEN environment variable");
 
-    let intents =
-        serenity::GatewayIntents::non_privileged() | serenity::GatewayIntents::GUILD_PRESENCES;
+    let intents = serenity::GatewayIntents::non_privileged()
+        | serenity::GatewayIntents::GUILD_PRESENCES
+        | serenity::GatewayIntents::MESSAGE_CONTENT;
 
     let framework = poise::Framework::builder()
         .options(poise::FrameworkOptions {
@@ -89,11 +93,17 @@ async fn main() -> Result<(), Error> {
 }
 
 async fn handle_event(
-    _ctx: &serenity::Context,
+    ctx: &serenity::Context,
     event: &serenity::FullEvent,
     _framework: poise::FrameworkContext<'_, Data, Error>,
     data: &Data,
 ) -> Result<(), Error> {
+    // Handle newly created Discord messages.
+    if let serenity::FullEvent::Message { new_message } = event {
+        bib_sanitizer::sanitizer::handle_message(ctx, new_message).await?;
+    }
+
+    // Handle League presence updates.
     if let serenity::FullEvent::PresenceUpdate { new_data } = event {
         let elapsed = data
             .playtime_tracker

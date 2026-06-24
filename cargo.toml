@@ -13,3 +13,5 @@ colored = "3.1.1"
 serde_json = "1.0.150"
 serde = { version = "1.0.228", features = ["derive"] }
 sqlx = { version = "0.9.0", features = ["sqlite", "runtime-tokio"] }
+linkify = "0.11.0"
+url = "2.5.8"
