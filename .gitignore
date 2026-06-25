@@ -3,3 +3,4 @@
 *.json
 *.db
 BotDatabase.db
+.vscode

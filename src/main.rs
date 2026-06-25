@@ -10,10 +10,9 @@ mod random {
 mod league {
     pub mod playtime; // Track playtime in LoL using Discord Presence updates.
 }
-mod bib_sanitizer {
-    pub mod sanitizer; // Sanitize links
-}
-
+// This path thing seems to have fixed my IDE issue of graying shit out but sadly hints from rust analyzer is gone so kinda shit.
+#[path = "bib_sanitizer/sanitizer.rs"]
+mod sanitizer;
 use std::sync::Arc;
 
 use colored::*;
@@ -100,7 +99,7 @@ async fn handle_event(
 ) -> Result<(), Error> {
     // Handle newly created Discord messages.
     if let serenity::FullEvent::Message { new_message } = event {
-        bib_sanitizer::sanitizer::handle_message(ctx, new_message).await?;
+        sanitizer::handle_message(ctx, new_message).await?;
     }
 
     // Handle League presence updates.

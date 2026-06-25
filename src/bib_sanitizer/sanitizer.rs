@@ -1,5 +1,3 @@
-#![allow(dead_code, unused_imports)]
-
 use std::collections::HashSet;
 
 use linkify::{LinkFinder, LinkKind};
@@ -127,9 +125,9 @@ pub async fn handle_message(
     }
 
     let heading = if sanitized_urls.len() == 1 {
-        "**Sanitized link:**\n"
+        "**Sanitized link:**"
     } else {
-        "**Sanitized links:**\n"
+        "**Sanitized links:**"
     };
 
     let mut response = String::from(heading);
