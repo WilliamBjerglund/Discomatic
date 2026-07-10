@@ -11,8 +11,11 @@ mod league {
     pub mod playtime; // Track playtime in LoL using Discord Presence updates.
 }
 // This path thing seems to have fixed my IDE issue of graying shit out but sadly hints from rust analyzer is gone so kinda shit.
+#[path = "bib_sanitizer/metadata.rs"]
+mod metadata;
 #[path = "bib_sanitizer/sanitizer.rs"]
 mod sanitizer;
+
 use std::sync::Arc;
 
 use colored::*;
@@ -100,6 +103,7 @@ async fn handle_event(
     // Handle newly created Discord messages.
     if let serenity::FullEvent::Message { new_message } = event {
         sanitizer::handle_message(ctx, new_message).await?;
+        metadata::handle_message(ctx, new_message).await?;
     }
 
     // Handle League presence updates.
