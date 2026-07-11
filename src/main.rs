@@ -9,6 +9,7 @@ mod random {
 }
 mod league {
     pub mod playtime; // Track playtime in LoL using Discord Presence updates.
+    pub mod status; // Periodically checks the discords presence and shows a condensed top 3 playtime summary in the status.
 }
 // This path thing seems to have fixed my IDE issue of graying shit out but sadly hints from rust analyzer is gone so kinda shit.
 #[path = "bib_sanitizer/metadata.rs"]
@@ -66,6 +67,12 @@ async fn main() -> Result<(), Error> {
                 // starts the background task
                 tokio::spawn(league::playtime::run_auto_leaderboard_loop(
                     ctx.http.clone(),
+                    pool.clone(),
+                ));
+
+                // starts the background task that updates the bot status with top 3 playtime
+                tokio::spawn(league::status::run_status_update_loop(
+                    ctx.clone(),
                     pool.clone(),
                 ));
 
