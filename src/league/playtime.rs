@@ -12,6 +12,16 @@ use crate::{Context, Error};
 
 const TRACKED_GAME: &str = "League of Legends";
 
+// UNIX timestamp since start 21-06-2026
+const BOT_START_UNIX: u64 = 1_781_985_300;
+// how wide is "Xh Xm" column reserved
+const TIME_FIELD_WIDTH: f32 = 60.0;
+
+// how wide is name column reserved
+const NAME_FIELD_WIDTH: f32 = 90.0;
+const BOLD_DIGIT_WIDTH: f32 = 9.0;
+const SPACE_WIDTH: f32 = 3.7;
+
 // How often the background task checks whether any auto-leaderboard is due for a refresh.
 const AUTO_CHECK_INTERVAL: Duration = Duration::from_secs(5 * 60);
 
@@ -68,6 +78,39 @@ fn current_unix_time() -> u64 {
         .as_secs()
 }
 
+// This is a bit of a hack to get the visual width of a string in Discord's monospace font.
+// It works but not perfect i couldn't find gg sans exact width so used AI to get estimates.
+fn char_width(c: char) -> f32 {
+    match c {
+        'i' | 'l' | 'j' | 'I' | '.' | ',' | '\'' | ':' | ';' | '|' | '!' => 2.8,
+        'f' | 't' | 'r' => 5.5,
+        'm' | 'w' | 'M' | 'W' => 11.0,
+        ' ' => 3.7,
+        _ => 8.2, // default: lowercase, digits, other uppercase
+    }
+}
+
+// Returns the visual width of a string in Discord's monospace font.
+fn visual_width(s: &str) -> f32 {
+    s.chars().map(char_width).sum()
+}
+
+// Returns a string of spaces to pad the name field so that the playtime column is aligned.
+fn padding_spaces(name: &str, rank: usize) -> String {
+    let extra_rank_digits = rank.to_string().len().saturating_sub(1) as f32;
+    let effective_target = NAME_FIELD_WIDTH - extra_rank_digits * BOLD_DIGIT_WIDTH;
+    let spare = (effective_target - visual_width(name)).max(0.0);
+    let n = (spare / SPACE_WIDTH).floor() as usize;
+    " ".repeat(n)
+}
+
+// Returns a string of spaces to pad arbitrary text to a target width in Discord's monospace font.
+fn pad_to_width(text: &str, target_width: f32) -> String {
+    let spare = (target_width - visual_width(text)).max(0.0);
+    let n = (spare / SPACE_WIDTH).floor() as usize;
+    " ".repeat(n)
+}
+
 /*
 This function builds the leaderboard message from the list of users and their playtime.
 It then just pairs playtime fetching with formatting so both /playtime and the auto-leaderboard show exactly the same output.
@@ -86,21 +129,47 @@ async fn build_leaderboard_message(
         return Ok("No playtime data available yet.".to_string());
     }
 
+    let mut names = Vec::with_capacity(rows.len());
+    for &(user_id, _) in &rows {
+        let user = serenity::UserId::new(user_id as u64).to_user(http).await?;
+        names.push(user.name);
+    }
+
+    let total_elapsed_seconds = current_unix_time().saturating_sub(BOT_START_UNIX);
+    let total_elapsed_hours = total_elapsed_seconds / 3600;
+
     let mut lines = Vec::new();
 
-    for (rank, &(user_id, seconds)) in rows.iter().enumerate() {
-        let user = serenity::UserId::new(user_id as u64).to_user(http).await?;
+    const SPACE_AFTER_DASH: &str = "    ";
+    const SPACE_BEFORE_OUT_OF: &str = "    ";
+
+    for (rank, (name, &(_, seconds))) in names.iter().zip(rows.iter()).enumerate() {
+        let name_pad = padding_spaces(name, rank + 1);
+        let time_str = format_duration(seconds as u64);
+        let time_pad = pad_to_width(&time_str, TIME_FIELD_WIDTH);
+
+        let percentage = if total_elapsed_seconds > 0 {
+            (seconds as f64 / total_elapsed_seconds as f64) * 100.0
+        } else {
+            0.0
+        };
 
         lines.push(format!(
-            "**{}.** {} — {}",
+            "**{}.** {}{} — {}{}{}{} —{}out of {total_elapsed_hours}h (**{percentage:.1}%**)",
             rank + 1,
-            user.name,
-            format_duration(seconds as u64)
+            name,
+            name_pad,
+            SPACE_AFTER_DASH,
+            time_str,
+            time_pad,
+            SPACE_AFTER_DASH,
+            SPACE_BEFORE_OUT_OF,
         ));
     }
 
     Ok(format!(
-        "**Top 10 most degenerate LoL players so far:**\n{}",
+        "**Top 10 most degenerate LoL players so far:**\n{}\n{}",
+        "**Measured since Sunday 21. June 2026**",
         lines.join("\n")
     ))
 }
