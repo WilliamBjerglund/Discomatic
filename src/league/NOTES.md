@@ -14,6 +14,8 @@ The implementation was created with the `Gummiees/playtime-discord-bot` project 
 
 - Provides /playtime and /playtimeauto commands for updates
 
+- Provides a rotating status showing top 10 and their current playtime
+
 # Important Notes
 
 - All Active sessions are lostd if and when the bot restarts because they are currently only stored in memory.
