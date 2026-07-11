@@ -1,9 +1,5 @@
-/*
-This is my attempt at making a simple tracker that will make Alexander have most hours in league for the server.
-It was largely made using
-https://github.com/Gummiees/playtime-discord-bot
-as a reference
-*/
+// playtime.rs
+// This file contains the logic for tracking playtime of League of Legends and displaying a leaderboard.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
