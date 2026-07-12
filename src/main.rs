@@ -1,4 +1,5 @@
 /*
+main.rs
 This is my simple rust discord bot for now, i might split into more files as i progress on writing it.
 For now it's a dice roller that understands notation like d20, 2d6, or 2d20+4, defaulting to a single d6.
 */
