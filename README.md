@@ -11,3 +11,4 @@ Anything else is just more fun things i wanted to see if i could make.
 - A playtime Tracker for League of Legends only using presense updates
 - Simple commands to handle Dice Rolling
 - A very Simple and stupid BibTex creator that uses DOI or arXiv for now.
+- A very simple music player
