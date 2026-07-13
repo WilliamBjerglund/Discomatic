@@ -19,7 +19,7 @@ scraper = "0.27.0"
 reqwest = { version = "0.12", default-features = false, features = [
     "rustls-tls",
     "json",
-] }
+] } # needs to be version 0.12 for songbird to work
 songbird = { version = "0.6", features = [
     "serenity",
     "driver",
@@ -38,6 +38,6 @@ symphonia = { version = "0.5", features = [
     "mkv",
     "wav",
     "ogg",
-] }
+] } # needs to be version 0.5 for songbird to work
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

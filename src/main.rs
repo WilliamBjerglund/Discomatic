@@ -6,15 +6,18 @@ For now it's a dice roller that understands notation like d20, 2d6, or 2d20+4, d
 
 mod db; // Shared SQL database for all modules to use
 mod random {
-    pub mod dice; // Roll Dice
+    pub mod commands;
+    pub mod dice; // Roll Dice // Random commands
 }
 mod league {
+    pub mod commands;
     pub mod playtime; // Track playtime in LoL using Discord Presence updates.
-    pub mod status; // Periodically checks the discords presence and shows a condensed top 3 playtime summary in the status.
+    pub mod status; // Periodically checks the discords presence and shows a condensed top 3 playtime summary in the status. // League commands
 }
 
 mod music_player {
-    pub mod player; // Music player using songbird and yt-dlp
+    pub mod commands;
+    pub mod player; // Music player using songbird and yt-dlp // Music player commands
 }
 
 // This path thing seems to have fixed my IDE issue of graying shit out but sadly hints from rust analyzer is gone so kinda shit.
@@ -44,6 +47,17 @@ type Error = Box<dyn std::error::Error + Send + Sync>;
 // The context passed to all command functions.
 type Context<'a> = poise::Context<'a, Data, Error>;
 
+// helper function that takes all functions and makes them available
+fn build_commands() -> Vec<poise::Command<Data, Error>> {
+    let mut commands = Vec::new();
+
+    commands.extend(music_player::commands::all());
+    commands.extend(league::commands::all());
+    commands.extend(random::commands::all());
+
+    commands
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     dotenvy::dotenv().ok();
@@ -65,17 +79,7 @@ async fn main() -> Result<(), Error> {
 
     let framework = poise::Framework::builder()
         .options(poise::FrameworkOptions {
-            commands: vec![
-                // Random commands
-                random::dice::roll(),
-                // League commands
-                league::playtime::playtime(),
-                league::playtime::playtimeauto(),
-                // Music commands
-                music_player::player::join(),
-                music_player::player::play(),
-                music_player::player::stop(),
-            ],
+            commands: build_commands(),
 
             event_handler: |ctx, event, framework, data| {
                 Box::pin(handle_event(ctx, event, framework, data))
