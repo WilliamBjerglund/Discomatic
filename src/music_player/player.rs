@@ -113,3 +113,18 @@ pub async fn stop(ctx: Context<'_>) -> Result<(), Error> {
 
     Ok(())
 }
+
+#[poise::command(slash_command, guild_only, category = "Music")]
+pub async fn skip(ctx: Context<'_>) -> Result<(), Error> {
+    let guild_id = ctx.guild_id().unwrap();
+
+    let Some(call_lock) = ctx.data().songbird.get(guild_id) else {
+        ctx.say("Nothing is playing.").await?;
+        return Ok(());
+    };
+
+    let call = call_lock.lock().await;
+    call.queue().skip()?;
+    ctx.say("Skipped.").await?;
+    Ok(())
+}

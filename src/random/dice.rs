@@ -69,7 +69,7 @@ fn parse_dice_notation(input: Option<&str>) -> Result<DiceRoll, String> {
 }
 
 // Rolls dice using notation such as d20, 2d6, or 2d20+4.
-#[poise::command(slash_command)]
+#[poise::command(slash_command, category = "Random")]
 pub async fn roll(
     ctx: Context<'_>,
 

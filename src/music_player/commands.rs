@@ -5,5 +5,6 @@ pub fn all() -> Vec<poise::Command<Data, Error>> {
         super::player::join(),
         super::player::play(),
         super::player::stop(),
+        super::player::skip(),
     ]
 }
