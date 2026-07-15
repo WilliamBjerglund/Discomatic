@@ -1,3 +1,5 @@
+// src/music_player/commands.rs
+
 use crate::{Data, Error};
 
 pub fn all() -> Vec<poise::Command<Data, Error>> {

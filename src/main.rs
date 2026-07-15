@@ -20,6 +20,7 @@ mod league {
 mod music_player {
     pub mod commands;
     pub mod player; // Music player using songbird and yt-dlp // Music player commands
+    pub mod playlist; // Handle Discord events for the music_player module
 }
 
 mod bib_sanitizer {

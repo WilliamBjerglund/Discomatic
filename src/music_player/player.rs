@@ -11,6 +11,7 @@ https://github.com/phoxwupsh/turto
 use poise::serenity_prelude::ChannelId;
 use songbird::input::{Compose, YoutubeDl};
 
+use crate::music_player::playlist;
 use crate::{Context, Error};
 
 // Finds the voice channel of the user
@@ -40,7 +41,7 @@ pub async fn join(ctx: Context<'_>) -> Result<(), Error> {
 #[poise::command(slash_command, guild_only, category = "Music")]
 pub async fn play(
     ctx: Context<'_>,
-    #[description = "Youtube link or search query"] query: String,
+    #[description = "Youtube link or search query or playlist link"] query: String,
 ) -> Result<(), Error> {
     let guild_id = ctx.guild_id().expect("Guild only");
 
@@ -56,6 +57,10 @@ pub async fn play(
     // Case 2: If the bot is not already in the VC join automatically.
     let call_lock = ctx.data().songbird.join(guild_id, channel_id).await?;
     let is_url = query.starts_with("http://") || query.starts_with("https://");
+
+    if is_url && playlist::is_playlist_url(&query) {
+        return playlist::queue_playlist(ctx, call_lock, &query).await;
+    }
 
     let mut source = if is_url {
         // if the query is a URL just use it.
