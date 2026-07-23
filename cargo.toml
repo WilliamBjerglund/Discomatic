@@ -41,3 +41,4 @@ symphonia = { version = "0.5", features = [
 ] } # needs to be version 0.5 for songbird to work
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+serde = "1.0.229"

@@ -42,6 +42,8 @@ struct Data {
     // dependencies for Music player
     songbird: Arc<songbird::Songbird>,
     http_client: reqwest::Client,
+    // Waifu tag cache
+    //tag_cache: Arc<waifu::nekos::TagCache>,
 }
 
 // A catch-all error type.
@@ -59,6 +61,7 @@ fn build_commands() -> Vec<poise::Command<Data, Error>> {
     commands.extend(music_player::commands::all());
     commands.extend(league::commands::all());
     commands.extend(random::commands::all());
+    //commands.extend(waifu::commands::all());
 
     commands
 }
@@ -88,13 +91,28 @@ async fn initialize_data(
 
     let playtime_tracker = Arc::new(league::playtime::PlaytimeTracker::new());
 
+    let http_client = reqwest::Client::builder()
+        .user_agent(concat!(
+            "Discomatic/",
+            env!("CARGO_PKG_VERSION"),
+            " Discord bot"
+        ))
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(20))
+        .build()?;
+
+    //let tag_cache = Arc::new(waifu::nekos::TagCache::new());
+
     league::tasks::start(ctx, pool.clone());
+
+    //waifu::tasks::start_tag_cache_refresh(http_client.clone(), tag_cache.clone());
 
     Ok(Data {
         playtime_tracker,
         pool,
         songbird,
-        http_client: reqwest::Client::new(),
+        http_client,
+        //tag_cache,
     })
 }
 
