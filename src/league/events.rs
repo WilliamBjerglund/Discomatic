@@ -1,3 +1,8 @@
+/*
+src/league/events.rs
+Handles Discord events for the league module.
+*/
+
 use poise::serenity_prelude as serenity;
 
 use crate::{Data, Error};

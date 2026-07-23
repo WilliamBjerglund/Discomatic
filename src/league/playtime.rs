@@ -1,5 +1,7 @@
-// playtime.rs
-// This file contains the logic for tracking playtime of League of Legends and displaying a leaderboard.
+/*
+src/league/playtime.rs
+This module handles tracking playtime for League of Legends using Discord presence updates.
+*/
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};

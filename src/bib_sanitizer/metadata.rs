@@ -1,7 +1,8 @@
-// metadata.rs
-// This file contains the logic for fetching metadata from external sources (CrossRef and arXiv) and formatting it as BibTeX entries.
-// It also includes functions for extracting citation sources from messages and handling Discord messages to provide BibTeX citations.
-
+/*
+metadata.rs
+This file contains the logic for fetching metadata from external sources (CrossRef and arXiv) and formatting it as BibTeX entries.
+It also includes functions for extracting citation sources from messages and handling Discord messages to provide BibTeX citations.
+*/
 use linkify::{LinkFinder, LinkKind};
 use poise::serenity_prelude as serenity;
 use regex::Regex;

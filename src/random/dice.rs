@@ -1,4 +1,5 @@
 /*
+src/random/dice.rs
 Dice roller that understands notation like d20, 2d6, or 2d20+4, defaulting to a single d6.
 */
 

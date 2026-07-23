@@ -1,5 +1,7 @@
-// status.rs
-// Periodically cehcks the discords presence and shows a condensed top 10 playtime summary in the status.
+/*
+src/league/status.rs
+Periodically cehcks the discords presence and shows a condensed top 10 playtime summary in the status.
+*/
 
 use std::time::Duration;
 

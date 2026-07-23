@@ -1,5 +1,5 @@
 /*
-player.rs
+src/music_player/player.rs
 This is a attempt at making a Voice playblack / Discord Music Bot.
 
 The idea: It should join a channel, play music in accordance with a queue via yt-dlp.

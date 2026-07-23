@@ -1,4 +1,5 @@
-/* playlist.rs
+/*
+src/music_player/playlist.rs
 
 By default Songbird sets the --no-playlist flag for yt-dlp meaning if a user provides a playlist they get just the first song.
 

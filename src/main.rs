@@ -9,6 +9,7 @@ mod random {
     pub mod commands;
     pub mod dice; // Roll Dice // Random commands
 }
+
 mod league {
     pub mod commands;
     pub mod events;
@@ -30,6 +31,12 @@ mod bib_sanitizer {
     pub mod sanitizer; // Handle Discord events for the bib_sanitizer module
 }
 
+mod waifu {
+    pub mod commands;
+    pub mod nekos; // Handle Discord events for the waifu module
+    pub mod tasks; // Background tasks for the waifu module
+}
+
 use std::sync::Arc;
 
 use colored::*;
@@ -44,7 +51,7 @@ struct Data {
     songbird: Arc<songbird::Songbird>,
     http_client: reqwest::Client,
     // Waifu tag cache
-    //tag_cache: Arc<waifu::nekos::TagCache>,
+    tag_cache: Arc<waifu::nekos::TagCache>,
 }
 
 // A catch-all error type.
@@ -62,7 +69,7 @@ fn build_commands() -> Vec<poise::Command<Data, Error>> {
     commands.extend(music_player::commands::all());
     commands.extend(league::commands::all());
     commands.extend(random::commands::all());
-    //commands.extend(waifu::commands::all());
+    commands.extend(waifu::commands::all());
 
     commands
 }
@@ -102,18 +109,18 @@ async fn initialize_data(
         .timeout(std::time::Duration::from_secs(20))
         .build()?;
 
-    //let tag_cache = Arc::new(waifu::nekos::TagCache::new());
+    let tag_cache = Arc::new(waifu::nekos::TagCache::new());
 
     league::tasks::start(ctx, pool.clone());
 
-    //waifu::tasks::start_tag_cache_refresh(http_client.clone(), tag_cache.clone());
+    waifu::tasks::start_tag_cache_refresh(http_client.clone(), tag_cache.clone());
 
     Ok(Data {
         playtime_tracker,
         pool,
         songbird,
         http_client,
-        //tag_cache,
+        tag_cache,
     })
 }
 

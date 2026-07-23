@@ -1,5 +1,7 @@
-// sanitizer.rs
-// This file contains the logic for sanitizing URLs and messages, removing tracking parameters from URLs found in Discord messages.
+/*
+sanitizer.rs
+This file contains the logic for sanitizing URLs and messages, removing tracking parameters from URLs found in Discord messages.
+*/
 
 use std::collections::HashSet;
 

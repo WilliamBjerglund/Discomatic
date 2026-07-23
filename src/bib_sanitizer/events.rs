@@ -1,3 +1,8 @@
+/*
+src/bib_sanitizer/events.rs
+This file contains the event handling logic for the bib_sanitizer module.
+*/
+
 use poise::serenity_prelude as serenity;
 
 use crate::Error;
