@@ -11,7 +11,7 @@ https://github.com/phoxwupsh/turto
 use poise::serenity_prelude::ChannelId;
 use songbird::input::{Compose, YoutubeDl};
 
-use crate::music_player::playlist;
+use crate::music_player::{playlist, tasks};
 use crate::{Context, Error};
 
 // Finds the voice channel of the user
@@ -30,8 +30,15 @@ pub async fn join(ctx: Context<'_>) -> Result<(), Error> {
         return Ok(());
     };
 
-    // Case 2: Join the voice channel
+    // Case 2: Join the voice channel if the bot is not already connected
+    let already_connected = ctx.data().songbird.get(guild_id).is_some();
     ctx.data().songbird.join(guild_id, channel_id).await?;
+
+    // Start the idle timer if the bot is not already connected to a voice channel
+    if !already_connected {
+        tasks::idle_timer(ctx.data().songbird.clone(), guild_id);
+    }
+
     ctx.say(format!("Joined <#{channel_id}>")).await?;
 
     Ok(())
@@ -55,7 +62,13 @@ pub async fn play(
     ctx.defer().await?;
 
     // Case 2: If the bot is not already in the VC join automatically.
+    let already_connected = ctx.data().songbird.get(guild_id).is_some();
     let call_lock = ctx.data().songbird.join(guild_id, channel_id).await?;
+
+    if !already_connected {
+        tasks::idle_timer(ctx.data().songbird.clone(), guild_id);
+    }
+
     let is_url = query.starts_with("http://") || query.starts_with("https://");
 
     if is_url && playlist::is_playlist_url(&query) {
