@@ -109,7 +109,7 @@ async fn initialize_data(
         .timeout(std::time::Duration::from_secs(20))
         .build()?;
 
-    let tag_cache = Arc::new(waifu::nekos::TagCache::new());
+    let tag_cache = Arc::new(waifu::nekos::TagCache::default());
 
     league::tasks::start(ctx, pool.clone());
 
