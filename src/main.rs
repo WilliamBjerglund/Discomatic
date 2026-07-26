@@ -20,6 +20,7 @@ mod league {
 
 mod music_player {
     pub mod commands;
+    pub mod events;
     pub mod player; // Music player using songbird and yt-dlp // Music player commands
     pub mod playlist; // Handle Discord events for the music_player module
     pub mod search;
@@ -214,6 +215,7 @@ async fn handle_event(
 ) -> Result<(), Error> {
     bib_sanitizer::events::handle(ctx, event).await?;
     league::events::handle(event, data).await?;
+    music_player::events::handle(ctx, event, data).await?;
 
     Ok(())
 }

@@ -36,7 +36,11 @@ pub async fn join(ctx: Context<'_>) -> Result<(), Error> {
 
     // Start the idle timer if the bot is not already connected to a voice channel
     if !already_connected {
-        tasks::idle_timer(ctx.data().songbird.clone(), guild_id);
+        tasks::idle_timer(
+            ctx.data().songbird.clone(),
+            guild_id,
+            ctx.serenity_context().cache.clone(),
+        );
     }
 
     ctx.say(format!("Joined <#{channel_id}>")).await?;
@@ -81,7 +85,11 @@ pub async fn play(
     let call_lock = ctx.data().songbird.join(guild_id, channel_id).await?;
 
     if !already_connected {
-        tasks::idle_timer(ctx.data().songbird.clone(), guild_id);
+        tasks::idle_timer(
+            ctx.data().songbird.clone(),
+            guild_id,
+            ctx.serenity_context().cache.clone(),
+        );
     }
 
     let is_url = query.starts_with("http://") || query.starts_with("https://");
