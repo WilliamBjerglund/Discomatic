@@ -11,7 +11,7 @@ https://github.com/phoxwupsh/turto
 use poise::serenity_prelude::ChannelId;
 use songbird::input::{Compose, YoutubeDl};
 
-use crate::music_player::{playlist, tasks};
+use crate::music_player::{playlist, search, tasks};
 use crate::{Context, Error};
 
 // Finds the voice channel of the user
@@ -44,11 +44,26 @@ pub async fn join(ctx: Context<'_>) -> Result<(), Error> {
     Ok(())
 }
 
+fn format_duration(duration: std::time::Duration) -> String {
+    let total_seconds = duration.as_secs();
+    let hours = total_seconds / 3600;
+    let minutes = (total_seconds % 3600) / 60;
+    let seconds = total_seconds % 60;
+
+    if hours > 0 {
+        format!("{hours}:{minutes:02}:{seconds:02}")
+    } else {
+        format!("{minutes}:{seconds:02}")
+    }
+}
+
 // Function to play a Youtube link or search Youtube using supplied text by user.
 #[poise::command(slash_command, guild_only, category = "Music")]
 pub async fn play(
     ctx: Context<'_>,
-    #[description = "Youtube link or search query or playlist link"] query: String,
+    #[description = "Youtube link or search query or playlist link"]
+    #[autocomplete = "search::autocomplete_song"]
+    query: String,
 ) -> Result<(), Error> {
     let guild_id = ctx.guild_id().expect("Guild only");
 
@@ -95,6 +110,13 @@ pub async fn play(
     // If the title is not found, use the query as a fallback
     let title = metadata.title.unwrap_or_else(|| query.clone());
 
+    let duration = metadata
+        .duration
+        .map(format_duration)
+        .unwrap_or_else(|| "unknown length".to_string());
+
+    let display = format!("**{title}** `[{duration}]`");
+
     // play first song and queue rest.
     let was_queued = {
         let mut call = call_lock.lock().await;
@@ -106,9 +128,9 @@ pub async fn play(
     };
 
     if was_queued {
-        ctx.say(format!("Added to queue: {}", title)).await?;
+        ctx.say(format!("Added to queue: {display}")).await?;
     } else {
-        ctx.say(format!("Now playing: {}", title)).await?;
+        ctx.say(format!("Now playing: {display}")).await?;
     }
 
     Ok(())
