@@ -15,6 +15,7 @@ The implementation was created with the `phoxwupsh/turto` project as inspiration
   - /play gives support for links and search querys
   - also auto joins channel if /play is given and not in vc
   - it will now leave after 15 minutes provided it has had nothing to do in those 15 minutes
+    - it also leaves after 5 if `alone` and properly handles being manually disconnected.
 
 # Dependencies
 
