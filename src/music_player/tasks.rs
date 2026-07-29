@@ -6,11 +6,12 @@ This is a background task for the music player module.
 use std::{sync::Arc, time::Duration};
 
 use poise::serenity_prelude::{Cache, GuildId};
-use songbird::Songbird;
+use songbird::{Songbird, tracks::PlayMode};
 use tokio::time::{Instant, sleep};
 
 const IDLE_TIMEOUT: Duration = Duration::from_secs(15 * 60); // 15 minutes
 const ALONE_TIMEOUT: Duration = Duration::from_secs(5 * 60); // 5 minutes
+const PAUSED_TIMEOUT: Duration = Duration::from_secs(2 * 60 * 60); // 2 hours
 const CHECK_INTERVAL: Duration = Duration::from_secs(60); // 1 minute
 
 /// This background task will monitor the VC the bot is in if the bot is not doing anything for 15 minutes it will disconnect and cleanup.
@@ -20,6 +21,7 @@ pub fn idle_timer(songbird: Arc<Songbird>, guild_id: GuildId, cache: Arc<Cache>)
     tokio::spawn(async move {
         let mut idle_since = None; // Track when the bot became idle.
         let mut alone_since = None; // Track when the bot is alone in vc.
+        let mut paused_since = None; // Track when the bot is paused.
 
         loop {
             sleep(CHECK_INTERVAL).await;
@@ -29,9 +31,24 @@ pub fn idle_timer(songbird: Arc<Songbird>, guild_id: GuildId, cache: Arc<Cache>)
                 break;
             };
 
-            let queue_is_empty = {
+            let (queue_is_empty, current_track) = {
                 let call = call_lock.lock().await;
-                call.queue().is_empty()
+                (call.queue().is_empty(), call.queue().current())
+            };
+
+            let playback_paused = match current_track {
+                Some(track) => match track.get_info().await {
+                    Ok(info) => info.playing == PlayMode::Pause,
+                    Err(error) => {
+                        tracing::debug!(
+                            "could not read current track in guild {}: {}",
+                            guild_id,
+                            error
+                        );
+                        false
+                    }
+                },
+                None => false,
             };
 
             // check whether a real user is in the vc with us.
@@ -50,12 +67,21 @@ pub fn idle_timer(songbird: Arc<Songbird>, guild_id: GuildId, cache: Arc<Cache>)
                 alone_since = None;
             }
 
+            // paused playback timer
+            if playback_paused {
+                paused_since.get_or_insert_with(Instant::now);
+            } else {
+                paused_since = None;
+            }
+
             let idle_timed_out =
                 idle_since.is_some_and(|started| started.elapsed() >= IDLE_TIMEOUT);
             let alone_timed_out =
                 alone_since.is_some_and(|started| started.elapsed() >= ALONE_TIMEOUT);
+            let paused_timed_out =
+                paused_since.is_some_and(|started| started.elapsed() >= PAUSED_TIMEOUT);
 
-            if idle_timed_out || alone_timed_out {
+            if idle_timed_out || alone_timed_out || paused_timed_out {
                 disconnect_and_cleanup(&songbird, guild_id).await;
                 break;
             }

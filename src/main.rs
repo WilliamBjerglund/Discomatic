@@ -39,6 +39,11 @@ mod waifu {
     pub mod tasks; // Background tasks for the waifu module
 }
 
+mod github {
+    pub mod commands;
+    pub mod requests; // Handle Discord events for the github module
+}
+
 use std::sync::Arc;
 
 use colored::*;
@@ -54,12 +59,15 @@ struct Data {
     http_client: reqwest::Client,
     // Waifu tag cache
     tag_cache: Arc<waifu::nekos::TagCache>,
+    // Github client
+    github_issues: github::requests::GithubClient,
 }
 
 // A catch-all error type.
 type Error = Box<dyn std::error::Error + Send + Sync>;
 // The context passed to all command functions.
 type Context<'a> = poise::Context<'a, Data, Error>;
+type ApplicationContext<'a> = poise::ApplicationContext<'a, Data, Error>;
 
 // =====================
 // ! Helper Functions
@@ -72,6 +80,7 @@ fn build_commands() -> Vec<poise::Command<Data, Error>> {
     commands.extend(league::commands::all());
     commands.extend(random::commands::all());
     commands.extend(waifu::commands::all());
+    commands.extend(github::commands::all());
 
     commands
 }
@@ -113,6 +122,8 @@ async fn initialize_data(
 
     let tag_cache = Arc::new(waifu::nekos::TagCache::default());
 
+    let github_issues = github::requests::GithubClient::new()?;
+
     league::tasks::start(ctx, pool.clone());
 
     waifu::tasks::start_tag_cache_refresh(http_client.clone(), tag_cache.clone());
@@ -123,6 +134,7 @@ async fn initialize_data(
         songbird,
         http_client,
         tag_cache,
+        github_issues,
     })
 }
 

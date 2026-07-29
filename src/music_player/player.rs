@@ -176,3 +176,52 @@ pub async fn skip(ctx: Context<'_>) -> Result<(), Error> {
     ctx.say("Skipped.").await?;
     Ok(())
 }
+
+#[poise::command(slash_command, guild_only, category = "Music")]
+pub async fn pause(ctx: Context<'_>) -> Result<(), Error> {
+    let guild_id = ctx.guild_id().expect("Guild only");
+
+    let Some(call_lock) = ctx.data().songbird.get(guild_id) else {
+        ctx.say("Not in voice channel").await?;
+        return Ok(());
+    };
+
+    let call = call_lock.lock().await;
+
+    if call.queue().is_empty() {
+        ctx.say("Nothing is playing.").await?;
+        return Ok(());
+    }
+
+    call.queue().pause()?;
+    drop(call);
+
+    ctx.say("Paused music playback resume in maximum of 2 hours.")
+        .await?;
+
+    Ok(())
+}
+
+#[poise::command(slash_command, guild_only, category = "Music")]
+pub async fn resume(ctx: Context<'_>) -> Result<(), Error> {
+    let guild_id = ctx.guild_id().expect("Guild only");
+
+    let Some(call_lock) = ctx.data().songbird.get(guild_id) else {
+        ctx.say("Not in voice channel").await?;
+        return Ok(());
+    };
+
+    let call = call_lock.lock().await;
+
+    if call.queue().is_empty() {
+        ctx.say("Nothing is playing.").await?;
+        return Ok(());
+    }
+
+    call.queue().resume()?;
+    drop(call);
+
+    ctx.say("Resumed music.").await?;
+
+    Ok(())
+}

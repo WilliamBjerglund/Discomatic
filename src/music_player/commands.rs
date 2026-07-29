@@ -11,5 +11,7 @@ pub fn all() -> Vec<poise::Command<Data, Error>> {
         super::player::play(),
         super::player::stop(),
         super::player::skip(),
+        super::player::pause(),
+        super::player::resume(),
     ]
 }
