@@ -3,7 +3,7 @@ src/league/status.rs
 Periodically cehcks the discords presence and shows a condensed top 10 playtime summary in the status.
 */
 
-use std::time::Duration;
+use std::{collections::HashMap, time::Duration};
 
 use poise::serenity_prelude::{self as serenity};
 use sqlx::SqlitePool;
@@ -34,6 +34,7 @@ fn truncate_name(name: &str) -> String {
 async fn build_status_text_for_rank(
     pool: &SqlitePool,
     http: &serenity::Http,
+    name_cache: &mut HashMap<u64, String>,
     rank: usize,
 ) -> Result<Option<String>, Error> {
     // select one leaderboard entry at offset rank
@@ -54,10 +55,21 @@ async fn build_status_text_for_rank(
         return Ok(None);
     };
 
-    // Fetch the Discord user so we can get their name
-    let user = serenity::UserId::new(user_id as u64).to_user(http).await?;
+    let user_id = user_id as u64;
 
-    let name = truncate_name(&user.name);
+    // Fetch the Discord user so we can get their name if not in cache
+    let name = match name_cache.get(&user_id) {
+        Some(name) => name.clone(),
+
+        None => {
+            let user = serenity::UserId::new(user_id).to_user(http).await?;
+            let name = truncate_name(&user.name);
+
+            name_cache.insert(user_id, name.clone());
+
+            name
+        }
+    };
 
     let hours = seconds / 3600;
     let minutes = (seconds % 3600) / 60;
@@ -72,8 +84,10 @@ pub async fn run_status_update_loop(ctx: serenity::Context, pool: SqlitePool) {
     // The leaderboard position currently being displayed.
     let mut rank = 0usize;
 
+    let mut name_cache: HashMap<u64, String> = HashMap::new();
+
     loop {
-        match build_status_text_for_rank(&pool, &ctx.http, rank).await {
+        match build_status_text_for_rank(&pool, &ctx.http, &mut name_cache, rank).await {
             Ok(Some(text)) => {
                 ctx.set_activity(Some(serenity::ActivityData::watching(&text)));
 
