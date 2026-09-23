@@ -69,13 +69,9 @@ fn parse_dice_notation(input: Option<&str>) -> Result<DiceRoll, String> {
     })
 }
 
-// Rolls dice using notation such as d20, 2d6, or 2d20+4.
+/// Roll dice using notation such as d20, 2d6, or 2d20+4.
 #[poise::command(slash_command, category = "Random")]
-pub async fn roll(
-    ctx: Context<'_>,
-
-    #[description = "Dice notation, such as d20, 2d6, or 2d20+4"] dice: Option<String>,
-) -> Result<(), Error> {
+pub async fn roll(ctx: Context<'_>, dice: Option<String>) -> Result<(), Error> {
     let dice_roll = match parse_dice_notation(dice.as_deref()) {
         Ok(dice_roll) => dice_roll,
 

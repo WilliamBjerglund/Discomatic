@@ -20,6 +20,7 @@ fn user_voice_channel(ctx: Context<'_>) -> Option<ChannelId> {
 }
 
 // Command to join the VC user is currently in
+/// Join the voice channel the user is currently in.
 #[poise::command(slash_command, guild_only, category = "Music")]
 pub async fn join(ctx: Context<'_>) -> Result<(), Error> {
     let guild_id = ctx.guild_id().expect("Guild only");
@@ -62,6 +63,7 @@ fn format_duration(duration: std::time::Duration) -> String {
 }
 
 // Function to play a Youtube link or search Youtube using supplied text by user.
+/// Play a song from YouTube by URL or search query.
 #[poise::command(slash_command, guild_only, category = "Music")]
 pub async fn play(
     ctx: Context<'_>,
@@ -144,6 +146,7 @@ pub async fn play(
     Ok(())
 }
 
+/// Stop playback and clear the queue.
 #[poise::command(slash_command, guild_only, category = "Music")]
 pub async fn stop(ctx: Context<'_>) -> Result<(), Error> {
     let guild_id = ctx.guild_id().expect("Guild only");
@@ -162,6 +165,7 @@ pub async fn stop(ctx: Context<'_>) -> Result<(), Error> {
     Ok(())
 }
 
+/// Skip the currently playing song and play the next one in the queue.
 #[poise::command(slash_command, guild_only, category = "Music")]
 pub async fn skip(ctx: Context<'_>) -> Result<(), Error> {
     let guild_id = ctx.guild_id().unwrap();
@@ -177,6 +181,7 @@ pub async fn skip(ctx: Context<'_>) -> Result<(), Error> {
     Ok(())
 }
 
+/// Pause the currently playing song.
 #[poise::command(slash_command, guild_only, category = "Music")]
 pub async fn pause(ctx: Context<'_>) -> Result<(), Error> {
     let guild_id = ctx.guild_id().expect("Guild only");
@@ -202,6 +207,7 @@ pub async fn pause(ctx: Context<'_>) -> Result<(), Error> {
     Ok(())
 }
 
+/// Resume the currently paused song.
 #[poise::command(slash_command, guild_only, category = "Music")]
 pub async fn resume(ctx: Context<'_>) -> Result<(), Error> {
     let guild_id = ctx.guild_id().expect("Guild only");

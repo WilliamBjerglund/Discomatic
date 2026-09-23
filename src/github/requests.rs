@@ -119,6 +119,7 @@ impl GithubClient {
     }
 }
 
+/// Submit a feature request for Discomatic or report a bug.
 #[poise::command(slash_command, category = "Github", guild_only)]
 pub async fn request(ctx: ApplicationContext<'_>) -> Result<(), Error> {
     let Some(modal) = FeatureRequestModal::execute(ctx).await? else {

@@ -179,11 +179,10 @@ async fn autocomplete_tag(ctx: Context<'_>, partial: &str) -> impl Iterator<Item
         .map(|tag| tag.name)
 }
 
-/// This is the command Waifu that gets a random anime image optionally filtered by a tag.
+/// TGet a random anime image, optionally filtered by a tag.
 #[poise::command(slash_command)]
 pub async fn waifu(
     ctx: Context<'_>,
-
     #[description = "Optional tag; begin typing to search"]
     #[autocomplete = "autocomplete_tag"]
     tag: Option<String>,

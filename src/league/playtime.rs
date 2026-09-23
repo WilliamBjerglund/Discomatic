@@ -234,6 +234,7 @@ async fn refresh_leaderboard(
 }
 
 // Show the Top 10 users
+/// Show the top 10 Degenerate League players on the server.
 #[poise::command(slash_command, guild_only, category = "LoL")]
 pub async fn playtime(ctx: Context<'_>) -> Result<(), Error> {
     // simple ACK for interaction
@@ -284,6 +285,7 @@ impl Interval {
 // Now we make the command that does it all
 // Running in a new channel moves the leaderboard deleting of course still
 // running again in same channel just updates
+/// Configure automatic leaderboard updates for League.
 #[poise::command(slash_command, guild_only, category = "LoL")]
 pub async fn playtimeauto(
     ctx: Context<'_>,
